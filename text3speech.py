@@ -8,12 +8,13 @@ Original file is located at
 """
 
 import streamlit as st
-import openai
+from openai import OpenAI
+
 
 # ----------------------
 # Initialize OpenAI client
 # ----------------------
-client = openai(api_key=st.secrets["OPENAI_API_KEY"])
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.title("Your ChatBot Name 🤖🎙️")
 
