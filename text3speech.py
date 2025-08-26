@@ -17,51 +17,15 @@ openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 st.title("🎙️ Text2Speech ChatBot")
 
-# Initialize session state
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+from gradio_client import Client
 
-# Function to get AI response
-def get_response(prompt):
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=st.session_state.messages + [{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content
-
-# User input
-if prompt := st.chat_input("Say something..."):
-    # Append user message with optional emotion
-    st.session_state.messages.append({
-        "role": "user",
-        "content": prompt,
-        "emotion": "Happy"  # you can change this dynamically if needed
-    })
-
-    # Get assistant response
-    reply = get_response(prompt)
-
-    # Generate speech
-    tts = gTTS(reply)
-    audio_path = "reply.mp3"
-    tts.save(audio_path)
-
-    # Append assistant message
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": reply,
-        "emotion": "Neutral",
-        "audio": audio_path
-    })
-
-# Display chat history
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-        
-        # Safely display emotion (default = Neutral)
-        st.markdown(f"**Emotion:** {msg.get('emotion', 'Neutral')}")
-
-        # Safely play audio if available
-        if msg.get("audio") and os.path.exists(msg["audio"]):
-            st.audio(msg["audio"], format="audio/mp3")
+client = Client("NihalGazi/Text-To-Speech-Unlimited")
+result = client.predict(
+		prompt="Hello! What a splendid outing today!",
+		voice="alloy",
+		emotion="happy",
+		use_random_seed=True,
+		specific_seed=12345,
+		api_name="/text_to_speech_app"
+)
+print(result)
