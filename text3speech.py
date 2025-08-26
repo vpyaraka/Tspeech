@@ -8,7 +8,7 @@ Original file is located at
 """
 
 import streamlit as st
-from openai import OpenAI
+import openai
 
 # ----------------------
 # Initialize OpenAI client
