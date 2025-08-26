@@ -13,7 +13,7 @@ import openai
 # ----------------------
 # Initialize OpenAI client
 # ----------------------
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+client = openai(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.title("Your ChatBot Name 🤖🎙️")
 
