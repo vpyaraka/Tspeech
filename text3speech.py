@@ -58,7 +58,7 @@ def get_response(user_emotion: str):
 
     system_instruction = f"You are an assistant. {tone_map.get(user_emotion, tone_map['neutral'])}"
 
-    response = client.chat.completions.create(
+    response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "system", "content": system_instruction}] +
                  [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages if m["role"] != "assistant_audio"]
