@@ -20,141 +20,75 @@ import os
 # Put your key in .streamlit/secrets.toml as OPENAI_API_KEY = "sk-..."
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-st.set_page_config(page_title="Your ChatBot Name", page_icon="🤖")
-st.title("Your ChatBot Name 🤖🎙️ (no file-path audio)")
-
+st.title("TextConvertSpeech")
 # -------------------------
 # Session state
 # -------------------------
 if "messages" not in st.session_state:
-    st.session_state["messages"] = []  # list of dicts: role, content, emotion, audio_bytes(optional), audio_format(optional)
+    st.session_state["messages"] = [
+        {
+            "role": "system",
+            "content": (
+                "You are a professional AI assistant specialized in converting text into speech. "
+                "Your role is to help users to convert input text into speech which will be saved as a audio file once downloaded "
+                "based on the information they provide. You must clearly state that you would accept the prompt as a input and convert the prompt given by user to audio "
+                "do not provide any advice if asked more details on the text input. "
+                "If a user asks about anything unrelated to input text, reply: "
+                "'I'm here to help to only convert the input text to audio by adding voice and emotions over it. "
+                "Please type the input text and add respective emotions to generate into speech.' "
 
-# -------------------------
-# Simple emotion detector (replace with your own if needed)
-# -------------------------
-def detect_emotion(text: str) -> str:
-    t = text.lower()
-    if any(w in t for w in ["happy", "great", "awesome", "love", "excited"]):
-        return "happy"
-    if any(w in t for w in ["sad", "tired", "exhausted", "down", "upset"]):
-        return "sad"
-    if any(w in t for w in ["angry", "mad", "furious", "annoyed", "irritated"]):
-        return "angry"
-    return "neutral"
+            )
+        }
 
-# -------------------------
-# Generate audio (gTTS) -> return BYTES, not a file path
-# -------------------------
-def generate_audio_bytes(text: str) -> tuple[bytes, str]:
-    """
-    Returns (audio_bytes, audio_format)
-    audio_format is what you pass to st.audio(..., format=...)
-    """
-    buf = BytesIO()
-    # gTTS outputs mp3
-    gTTS(text=text, lang="en").write_to_fp(buf)
-    buf.seek(0)
-    return buf.read(), "audio/mp3"
+    ]  # list of dicts: role, content, emotion, audio_bytes(optional), audio_format(optional)
 
-# -------------------------
-# OpenAI text response with emotion-aware tone
-# -------------------------
-def get_response_toned(user_emotion: str) -> str:
-    tone_map = {
-        "neutral": "Respond in a balanced, professional, and clear tone.",
-        "happy":   "Respond in a cheerful, friendly, and encouraging tone.",
-        "sad":     "Respond in a gentle, empathetic, and supportive tone.",
-        "angry":   "Respond in a calm, understanding, and de-escalating tone."
-    }
-    system_instruction = f"You are an assistant. {tone_map.get(user_emotion, tone_map['neutral'])}"
-
-    # Only pass role/content (no raw audio bytes in messages)
-    history = [{"role": m["role"], "content": m["content"]}
-               for m in st.session_state["messages"]]
-
-    resp = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "system", "content": system_instruction}] + history
-    )
-    return resp.choices[0].message.content
-
-# -------------------------
-# UI: show history (text + audio-bytes)
-# -------------------------
-for msg in st.session_state["messages"]:
+# Display chat history
+for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        st.markdown(f"**{msg.get('emotion','neutral').capitalize()} tone:** {msg['content']}")
-        # Play audio only if we stored bytes
-        if "audio_bytes" in msg and msg["audio_bytes"]:
-            st.audio(msg["audio_bytes"], format=msg.get("audio_format", "audio/mp3"))
+        st.markdown(f"**Emotion:** {msg['emotion']}")
+        st.markdown(msg["content"])
+        if msg.get("audio"):
+            st.audio(msg["audio"])
 
-# -------------------------
-# Inputs: text + optional audio upload
-# -------------------------
-user_text = st.chat_input("Type your message...")
-user_audio_file = st.file_uploader("🎤 Or upload a voice message (mp3/wav/m4a)", type=["mp3", "wav", "m4a"])
+# Function to get assistant response
+def get_response():
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
+    )
+    return response.choices[0].message.content
 
-# If there is an uploaded audio, safely keep a copy of its bytes for playback
-uploaded_audio_bytes = None
-uploaded_audio_format = None
-if user_audio_file is not None:
-    # Read once into memory to avoid pointer issues
-    uploaded_audio_bytes = user_audio_file.getvalue()
-    # Infer format for st.audio
-    ext = (user_audio_file.name.split(".")[-1] or "").lower()
-    if ext == "mp3":
-        uploaded_audio_format = "audio/mp3"
-    elif ext == "wav":
-        uploaded_audio_format = "audio/wav"
-    elif ext == "m4a":
-        uploaded_audio_format = "audio/m4a"
-    else:
-        uploaded_audio_format = "audio/mpeg"  # fallback
+# Function to generate audio
+def generate_audio(text, filename="output.mp3"):
+    with client.audio.speech.with_streaming_response.create(
+        model="gpt-4o-mini-tts",
+        voice="alloy",
+        input=text
+    ) as response:
+        response.stream_to_file(filename)
+    return filename
 
-# Choose text as primary input (you can add transcription if needed)
-final_user_text = user_text
-if not final_user_text and uploaded_audio_bytes:
-    # If you want transcription, integrate Whisper here and set final_user_text to its text.
-    # For now, we just note that user sent an audio message without text.
-    final_user_text = "(User sent a voice message)"
+# User input
+user_input = st.chat_input("Type your message...")
+user_emotion = st.selectbox("Select your emotion", ["neutral", "happy", "sad", "angry"])
 
-# -------------------------
-# Handle submit
-# -------------------------
-if final_user_text:
-    user_emotion = detect_emotion(final_user_text)
-
-    # Append user's message
-    st.session_state["messages"].append({
-        "role": "user",
-        "content": final_user_text,
-        "emotion": user_emotion,
-        "audio_bytes": uploaded_audio_bytes,        # store raw bytes
-        "audio_format": uploaded_audio_format       # and the format string
-    })
-
-    # Display the just-added user message immediately
+if user_input:
+    # Append user message
+    st.session_state.messages.append(
+        {"role": "user", "content": user_input, "emotion": user_emotion, "audio": None}
+    )
     with st.chat_message("user"):
-        st.markdown(f"**{user_emotion.capitalize()} tone:** {final_user_text}")
-        if uploaded_audio_bytes:
-            st.audio(uploaded_audio_bytes, format=uploaded_audio_format)
+        st.markdown(f"**Emotion:** {user_emotion}")
+        st.markdown(user_input)
 
-    # Get assistant reply
-    assistant_reply = get_response_toned(user_emotion)
+    # Assistant response
+    assistant_reply = get_response()
+    audio_file = generate_audio(assistant_reply)
 
-    # Generate assistant TTS as BYTES
-    assistant_audio_bytes, assistant_audio_format = generate_audio_bytes(assistant_reply)
-
-    # Append assistant message
-    st.session_state["messages"].append({
-        "role": "assistant",
-        "content": assistant_reply,
-        "emotion": user_emotion,
-        "audio_bytes": assistant_audio_bytes,
-        "audio_format": assistant_audio_format
-    })
-
-    # Display assistant reply
+    st.session_state.messages.append(
+        {"role": "assistant", "content": assistant_reply, "emotion": "neutral", "audio": audio_file}
+    )
     with st.chat_message("assistant"):
-        st.markdown(f"**{user_emotion.capitalize()} tone:** {assistant_reply}")
-        st.audio(assistant_audio_bytes, format=assistant_audio_format)
+        st.markdown("**Emotion:** neutral")
+        st.markdown(assistant_reply)
+        st.audio(audio_file)
